@@ -3,9 +3,12 @@
         <v-col>
         <v-sheet height="64">
             <v-toolbar flat color="white">
+            <v-btn color="primary" class="mr-4" dark @click="dialog = true">
+                New Event
+            </v-btn>
             <v-btn outlined class="mr-4" color="grey darken-2" @click="setToday">
                 Today
-            </v-btn>
+            </v-btn>            
             <v-btn fab text small color="grey darken-2" @click="prev">
                 <v-icon small>mdi-chevron-left</v-icon>
             </v-btn>
@@ -38,6 +41,25 @@
             </v-menu>
             </v-toolbar>
         </v-sheet>
+
+        <!-- Add event dialog -->
+        <v-dialog v-model="dialog" max-width="500">
+            <v-card>
+                <v-container>
+                    <v-form @submit.prevent="addEvent">
+                        <v-text-field v-model="name" type="text" label="event name (required)"></v-text-field>
+                        <v-text-field v-model="details" type="text" label="details"></v-text-field>
+                        <v-text-field v-model="start" type="date" label="start (required)"></v-text-field>
+                        <v-text-field v-model="end" type="date" label="end (required)"></v-text-field>
+                        <v-text-field v-model="color" type="color" label="color (required)"></v-text-field>
+                        <v-btn type="submit" color="primary" class="mr-4" @click.stop="dialog = false">
+                            Create Event
+                        </v-btn>
+                    </v-form>
+                </v-container>
+            </v-card>
+        </v-dialog>
+
         <v-sheet height="600">
             <v-calendar
             ref="calendar"
@@ -55,25 +77,24 @@
             <v-menu v-model="selectedOpen" :close-on-content-click="false" :activator="selectedElement" offset-x>
                 <v-card color="grey lighten-4" min-width="350px" flat>
                     <v-toolbar :color="selectedEvent.color" dark>
-                    <v-btn icon>
+                    <v-btn icon @click="deleteEvent(selectedEvent.id)">
                         <v-icon>mdi-delete</v-icon>
                     </v-btn>
                     <v-toolbar-title v-html="selectedEvent.name"></v-toolbar-title>
-                    <v-spacer></v-spacer>
-                    <v-btn icon>
-                        <v-icon>mdi-heart</v-icon>
-                    </v-btn>
-                    <v-btn icon>
-                        <v-icon>mdi-dots-vertical</v-icon>
-                    </v-btn>
+                        <v-spacer></v-spacer>
                     </v-toolbar>
                     <v-card-text>
-                    <span v-html="selectedEvent.details"></span>
+                        <form v-if="currentlyEditing !== selectedEvent.id">
+                            {{ selectedEvent.details }}
+                        </form>
+                        <form v-else>
+                            <textarea-autosize v-model="selectedEvent.details" type="text" style="width:100%" :min-height="100" placeholder="add note"></textarea-autosize>
+                        </form>
                     </v-card-text>
                     <v-card-actions>
-                    <v-btn text color="secondary" @click="selectedOpen = false">
-                        Cancel
-                    </v-btn>
+                        <v-btn text color="secondary" @click="selectedOpen = false">Close</v-btn>
+                        <v-btn text v-if="currentlyEditing !== selectedEvent.id" @click.prevent="editEvent(selectedEvent)">Edit</v-btn>
+                        <v-btn text v-else @click.prevent="updateEvent(selectedEvent)">Save</v-btn>
                     </v-card-actions>
                 </v-card>
             </v-menu>
@@ -158,6 +179,38 @@ export default {
             })
             this.events = events;
         },
+        async addEvent() {
+            if (this.name && this.start && this.end) {
+                await db.collection('calEvent').add({
+                    name: this.name,
+                    details: this.details,
+                    start: this.start,
+                    end: this.end,
+                    color: this.color
+                });
+                this.getEvents();
+                this.name = "";
+                this.details = "";
+                this.start = "";
+                this.end = "";
+                this.color = "#1976D2";
+            }
+            else {
+                alert('The fileds are required');
+            }
+        },
+        async updateEvent(ev) {
+            await db.collection('calEvent').doc(this.currentlyEditing).update({
+                details: ev.details
+            });
+            this.selectedOpen = false;
+            this.currentlyEditing = null;
+        },
+        async deleteEvent(ev) {
+            await db.collection('calEvent').doc(ev).delete();
+            this.selectedOpen = false
+            this.getEvents();
+        },
         getEventColor(ev) {
             return ev.color;
         },
@@ -189,6 +242,9 @@ export default {
             }
 
             nativeEvent.stopPropagation()
+        },
+        editEvent(ev) {
+            this.currentlyEditing = ev.id;
         },
         updateRange ({ start, end }) {
             const events = []
